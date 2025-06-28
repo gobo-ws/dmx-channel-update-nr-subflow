@@ -1,0 +1,196 @@
+[
+    {
+        "id": "subflow_ola_update",
+        "type": "subflow",
+        "name": "Update OLA DMX",
+        "info": "### DMX Update Subflow\n\nThis subflow receives a DMX update string (e.g., `\"255,,128,,,1\"`) via `msg.payload`.\n\n---\n\n#### 🛠️ Function\n- Retrieves the current DMX values from the OLA REST API.\n- Only updates the channels specified in the update string (others remain unchanged).\n- Sends the updated DMX array back to OLA via the REST API.\n\n---\n\n#### ⚙️ Subflow Variables\n- `hostname`: Address of the OLA server (default: `localhost`)\n- `universe`: Universe number (default: `1`)\n\n---\n\n#### ▶️ Usage\n- Send the update string as `msg.payload` to the subflow.\n- The result (REST API response) will appear on the subflow's output.\n\n---\n\n#### 📦 Example\n- **Input**: `msg.payload = \"255,,128,,,1\"`\n- **Output**: REST API response from OLA\n\n---\n\n**Author:** [Johan Nilsson](https://gobo.ws) · [johan@gobo.ws](mailto:johan@gobo.ws)",
+        "category": "",
+        "in": [
+            {
+                "x": 60,
+                "y": 80,
+                "wires": [
+                    {
+                        "id": "set_update_string"
+                    }
+                ]
+            }
+        ],
+        "out": [
+            {
+                "x": 1720,
+                "y": 80,
+                "wires": [
+                    {
+                        "id": "debug_result",
+                        "port": 0
+                    }
+                ]
+            }
+        ],
+        "env": [
+            {
+                "name": "hostname",
+                "type": "str",
+                "value": "localhost"
+            },
+            {
+                "name": "universe",
+                "type": "num",
+                "value": "1"
+            }
+        ],
+        "meta": {
+            "author": "Johan Nilsson johan@gobo.ws"
+        },
+        "color": "#DDAA99"
+    },
+    {
+        "id": "set_update_string",
+        "type": "change",
+        "z": "subflow_ola_update",
+        "name": "Set update_string",
+        "rules": [
+            {
+                "t": "set",
+                "p": "update_string",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            }
+        ],
+        "x": 190,
+        "y": 80,
+        "wires": [
+            [
+                "set_universe"
+            ]
+        ]
+    },
+    {
+        "id": "set_universe",
+        "type": "change",
+        "z": "subflow_ola_update",
+        "name": "Set OLA Hostname & Universe",
+        "rules": [
+            {
+                "t": "set",
+                "p": "universe",
+                "pt": "msg",
+                "to": "universe",
+                "tot": "env"
+            },
+            {
+                "t": "set",
+                "p": "hostname",
+                "pt": "msg",
+                "to": "hostname",
+                "tot": "env"
+            }
+        ],
+        "x": 430,
+        "y": 80,
+        "wires": [
+            [
+                "get_dmx"
+            ]
+        ]
+    },
+    {
+        "id": "get_dmx",
+        "type": "http request",
+        "z": "subflow_ola_update",
+        "name": "GET current DMX",
+        "method": "GET",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "http://{{hostname}}:9090/get_dmx?u={{universe}}",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 670,
+        "y": 80,
+        "wires": [
+            [
+                "function_update"
+            ]
+        ]
+    },
+    {
+        "id": "function_update",
+        "type": "function",
+        "z": "subflow_ola_update",
+        "name": "Update DMX Array (skip empty, keep index)",
+        "func": "// Get current DMX array from REST API\nlet dmx = msg.payload.dmx;\nif (!Array.isArray(dmx)) {\n    node.error(\"No DMX array in response\");\n    return null;\n}\n\n// Use the update string from earlier in the flow\nlet input = msg.update_string;\nif (typeof input !== \"string\") {\n    node.error(\"No update string found\");\n    return null;\n}\n\n// Split input string, preserving empty fields\nlet updates = input.split(\",\");\nfor (let i = 0; i < updates.length; i++) {\n    if (updates[i] !== \"\") {\n        dmx[i] = parseInt(updates[i], 10);\n    }\n}\n\nmsg.updated_dmx = dmx.join(\",\");\nmsg.universe = msg.universe || 1;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 950,
+        "y": 80,
+        "wires": [
+            [
+                "function_build_body"
+            ]
+        ]
+    },
+    {
+        "id": "function_build_body",
+        "type": "function",
+        "z": "subflow_ola_update",
+        "name": "Build POST body",
+        "func": "msg.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };\nmsg.payload = `u=${msg.universe}&d=${msg.updated_dmx}`;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 1230,
+        "y": 80,
+        "wires": [
+            [
+                "set_dmx"
+            ]
+        ]
+    },
+    {
+        "id": "set_dmx",
+        "type": "http request",
+        "z": "subflow_ola_update",
+        "name": "POST updated DMX",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "body",
+        "url": "http://{{hostname}}:9090/set_dmx",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 1440,
+        "y": 80,
+        "wires": [
+            [
+                "debug_result"
+            ]
+        ]
+    },
+    {
+        "id": "debug_result",
+        "type": "debug",
+        "z": "subflow_ola_update",
+        "name": "Result",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1610,
+        "y": 80,
+        "wires": []
+    }
+]
